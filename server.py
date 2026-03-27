@@ -31,8 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# LLM Integration
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+
 
 # ============ CONFIGURAZIONE SICURA MONGODB ============
 # Usiamo .get() invece di [] per evitare il KeyError fatale se le variabili mancano.
@@ -49,8 +48,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "egigo_secret_key_change_in_production
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 
-# LLM Configuration
-EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -2474,17 +2472,5 @@ async def chat_with_assistant(request: AssistantRequest):
     except Exception as e:
         logger.error(f"AI Assistant error: {e}")
         raise HTTPException(status_code=500, detail=f"Errore assistente: {str(e)}")
-
-
-# Include the router in the main app
-app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
