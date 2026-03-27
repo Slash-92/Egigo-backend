@@ -15,17 +15,34 @@ from pathlib import Path
 import math
 import httpx
 import uuid
+from contextlib import asynccontextmanager # <-- NUOVO IMPORT NECESSARIO
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+
+# Caricamento sicuro del .env (non crasha se il file non esiste, es. su Render)
+env_path = ROOT_DIR / '.env'
+if env_path.exists():
+    load_dotenv(env_path)
+
+# Configure logging early
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # LLM Integration
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# ============ CONFIGURAZIONE SICURA MONGODB ============
+# Usiamo .get() invece di [] per evitare il KeyError fatale se le variabili mancano.
+# Inseriamo dei valori di fallback temporanei per permettere al modulo di caricarsi.
+MONGO_URL = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+DB_NAME = os.environ.get('DB_NAME', 'egigo_db')
+
+# Inizializzazione globale (permettere alle rotte di usare "db")
+client = AsyncIOMotorClient(MONGO_URL)
+db = client[DB_NAME]
 
 # JWT Configuration
 SECRET_KEY = os.environ.get("SECRET_KEY", "egigo_secret_key_change_in_production")
@@ -39,8 +56,38 @@ EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
-# Create the main app without a prefix
-app = FastAPI()
+# ============ LIFESPAN MANAGER ============
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🚀 Avvio del server in corso...")
+    
+    # Check preventivo delle variabili d'ambiente critiche
+    missing_vars = []
+    if not os.environ.get("MONGO_URL"): missing_vars.append("MONGO_URL")
+    if not os.environ.get("DB_NAME"): missing_vars.append("DB_NAME")
+    
+    if missing_vars:
+        logger.error(f"❌ CRITICAL: Mancano variabili d'ambiente: {', '.join(missing_vars)}")
+        logger.error("👉 Configurale su Render in 'Environment Variables'.")
+    
+    # Test della connessione al database
+    try:
+        logger.info("⏳ Verifica connessione a MongoDB...")
+        await client.admin.command('ping')
+        logger.info("✅ Connessione a MongoDB stabilita con successo!")
+    except Exception as e:
+        logger.error(f"❌ Errore fatale di connessione a MongoDB (credenziali errate o IP non sbloccato su Atlas?): {e}")
+
+    yield # Il server inizia ad accettare richieste qui
+    
+    # Chiusura pulita allo spegnimento
+    logger.info("🛑 Spegnimento del server...")
+    client.close()
+    logger.info("✅ Connessione MongoDB chiusa correttamente.")
+
+# Creiamo l'app iniettando il lifespan
+app = FastAPI(lifespan=lifespan)
+
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -2440,6 +2487,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+
