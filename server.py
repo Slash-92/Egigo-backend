@@ -2474,3 +2474,21 @@ async def chat_with_assistant(request: AssistantRequest):
         raise HTTPException(status_code=500, detail=f"Errore assistente: {str(e)}")
 
 
+# ============ CONFIGURAZIONE FINALE (DA AGGIUNGERE IN FONDO) ============
+
+# 1. Abilitiamo i CORS (permette all'app di parlare col server senza blocchi di sicurezza)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 2. COLLEGIAMO IL ROUTER (Questa è la riga che risolve il 404!)
+app.include_router(api_router)
+
+# Rotta di test rapida per vedere se il server è vivo
+@app.get("/")
+async def root():
+    return {"message": "EgiGo API is running!", "status": "online"}
